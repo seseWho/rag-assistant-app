@@ -15,7 +15,7 @@ class Chunk:
 
 
 def _make_chunk_id(doc_id: str, chunk_index: int, text: str) -> str:
-    digest = sha1(f"{doc_id}:{chunk_index}:{text}".encode("utf-8")).hexdigest()[:16]
+    digest = sha1(f"{doc_id}:{chunk_index}:{text}".encode()).hexdigest()[:16]
     return f"{doc_id}-{chunk_index}-{digest}"
 
 

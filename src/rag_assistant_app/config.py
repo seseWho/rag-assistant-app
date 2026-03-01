@@ -33,3 +33,23 @@ def get_config() -> AppConfig:
         embedding_model=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
         vector_store_dir=Path(os.getenv("VECTOR_STORE_DIR", ".rag_store")),
     )
+
+
+def get_llm_api_key() -> str:
+    return get_config().llm_api_key
+
+
+def get_llm_base_url() -> str:
+    return get_config().llm_base_url
+
+
+def get_llm_model() -> str:
+    return get_config().llm_model
+
+
+def get_embedding_model() -> str:
+    return get_config().embedding_model
+
+
+def get_vector_store_dir() -> Path:
+    return get_config().vector_store_dir

@@ -56,6 +56,11 @@ class LocalVectorStore:
     def _dot(a: list[float], b: list[float]) -> float:
         return sum(x * y for x, y in zip(a, b, strict=True))
 
+
+    def clear(self) -> None:
+        self._records = {}
+        self._persist()
+
     def query(self, text: str, top_k: int) -> list[RetrievedChunk]:
         if not self._records:
             return []
