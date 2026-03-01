@@ -1,0 +1,23 @@
+[project]
+name = "rag-assistant-app"
+version = "0.1.0"
+description = "Minimal RAG assistant app"
+requires-python = ">=3.10"
+dependencies = [
+  "streamlit>=1.33",
+]
+
+[project.optional-dependencies]
+embeddings = [
+  "sentence-transformers>=2.7",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
