@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rag-assistant-app"
+version = "0.1.0"
+description = "Scaffold for a local-first Gradio RAG assistant app"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "rag-assistant-app contributors" }
+]
+dependencies = [
+  "gradio>=4.44.0",
+  "python-dotenv>=1.0.1",
+  "requests>=2.32.0",
+  "chromadb>=0.5.5",
+  "sentence-transformers>=3.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.6.0",
+  "pytest>=8.3.0",
+  "mypy>=1.11.0",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["rag_assistant_app*", "ui*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
