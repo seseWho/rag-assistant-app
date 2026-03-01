@@ -1,46 +1,36 @@
-"""Minimal Streamlit app for indexing and retrieval."""
+"""Placeholder Gradio app entrypoint."""
 
 from __future__ import annotations
 
-import streamlit as st
+import gradio as gr
 
-from rag_assistant_app.service.rag_service import RagService
+from rag_assistant_app.config import get_config
+from rag_assistant_app.logging import configure_logging
 
-st.set_page_config(page_title="RAG Assistant", layout="wide")
-st.title("RAG Assistant")
 
-if "rag_service" not in st.session_state:
-    st.session_state["rag_service"] = RagService()
 
-service: RagService = st.session_state["rag_service"]
+def build_app() -> gr.Blocks:
+    """Create a minimal placeholder UI while RAG features are under development."""
 
-index_tab, retrieve_tab = st.tabs(["Index documents", "Retrieve"])
+    config = get_config()
 
-with index_tab:
-    st.subheader("Upload text/markdown documents")
-    files = st.file_uploader(
-        "Choose .txt or .md files",
-        type=["txt", "md"],
-        accept_multiple_files=True,
-    )
-    if st.button("Index uploaded documents", type="primary"):
-        summary = service.index_documents(files or [])
-        st.success(
-            f"Indexed {summary.docs_indexed} documents into {summary.chunks_indexed} chunks."
+    with gr.Blocks(title="RAG Assistant App") as demo:
+        gr.Markdown("# RAG Assistant App")
+        gr.Markdown("🚧 Coming soon: chat + document upload + local RAG pipeline.")
+        gr.Markdown(
+            (
+                "Configuration loaded successfully.\\n\\n"
+                f"- LLM base URL: `{config.llm_base_url}`\\n"
+                f"- LLM model: `{config.llm_model}`\\n"
+                f"- Embedding model: `{config.embedding_model}`\\n"
+                f"- Vector store dir: `{config.vector_store_dir}`"
+            )
         )
 
-with retrieve_tab:
-    st.subheader("Retrieve top-k chunks")
-    query = st.text_input("Query")
-    top_k = st.number_input("Top-k", min_value=1, max_value=20, value=3)
-    if st.button("Retrieve") and query.strip():
-        results = service.retrieve(query=query.strip(), top_k=int(top_k))
-        if not results:
-            st.info("No chunks found. Index documents first.")
-        for idx, chunk in enumerate(results, start=1):
-            st.markdown(
-                f"**{idx}. Score:** `{chunk.score:.4f}`  \\n"
-                f"**Chunk ID:** `{chunk.chunk_id}`  \\n"
-                f"**File:** `{chunk.metadata.get('filename', 'n/a')}`"
-            )
-            st.code(chunk.text)
+    return demo
+
+
+if __name__ == "__main__":
+    configure_logging()
+    app = build_app()
+    app.launch()

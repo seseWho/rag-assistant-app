@@ -1,16 +1,35 @@
-"""Runtime configuration for the RAG assistant app."""
+"""Application configuration loaded from environment variables."""
 
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
+from dotenv import load_dotenv
 
-def get_vector_store_dir() -> Path:
-    """Return the persistent vector store directory."""
-    return Path(os.getenv("VECTOR_STORE_DIR", ".rag_store")).expanduser().resolve()
+load_dotenv()
 
 
-def get_embedding_model() -> str:
-    """Return configured embedding model identifier."""
-    return os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+@dataclass(frozen=True)
+class AppConfig:
+    """Strongly named application configuration values."""
+
+    llm_api_key: str
+    llm_base_url: str
+    llm_model: str
+    embedding_model: str
+    vector_store_dir: Path
+
+
+
+def get_config() -> AppConfig:
+    """Build configuration from environment variables."""
+
+    return AppConfig(
+        llm_api_key=os.getenv("LLM_API_KEY", "lm-studio"),
+        llm_base_url=os.getenv("LLM_BASE_URL", "http://localhost:1234/v1"),
+        llm_model=os.getenv("LLM_MODEL", "<your-lm-studio-model-id>"),
+        embedding_model=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
+        vector_store_dir=Path(os.getenv("VECTOR_STORE_DIR", ".rag_store")),
+    )
