@@ -25,11 +25,27 @@ class RagService:
         self.vector_store = LocalVectorStore(embedder)
         self.retriever = Retriever(self.vector_store)
 
-    def index_documents(self, files: list[BinaryIO]) -> IndexSummary:
+    def index_documents(
+        self,
+        files: list[BinaryIO],
+        *,
+        chunk_size: int = 500,
+        chunk_overlap: int = 50,
+        rebuild_index: bool = False,
+    ) -> IndexSummary:
+        if rebuild_index:
+            self.vector_store.clear()
+
         documents = load_documents(files)
         chunk_records: list[ChunkRecord] = []
         for doc in documents:
-            chunks = chunk_text(doc_id=doc.doc_id, filename=doc.filename, text=doc.text)
+            chunks = chunk_text(
+                doc_id=doc.doc_id,
+                filename=doc.filename,
+                text=doc.text,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
             for chunk in chunks:
                 chunk_records.append(
                     ChunkRecord(

@@ -1,24 +1,22 @@
 # rag-assistant-app
 
-A lightweight Gradio-based Retrieval-Augmented Generation (RAG) assistant scaffold.
+A local-first Gradio Retrieval-Augmented Generation (RAG) assistant.
 
-This repository is **PR1 scaffolding only**: project layout, configuration, and a placeholder UI.
-No functional RAG indexing/retrieval/generation pipeline is implemented yet.
+## Features (PR3)
 
-## What this app is
-
-- A local-first assistant app foundation.
-- Chat + document upload UX will be built with Gradio.
-- Planned integrations:
-  - Local LLM via LM Studio's OpenAI-compatible API
-  - Local embeddings (sentence-transformers)
-  - Local vector store persistence (Chroma)
+- Upload `.txt` / `.md` documents and build a local index.
+- Configure chunking (`chunk_size`, `chunk_overlap`) at index time.
+- Ask questions in a chat UI backed by retrieval + LLM generation.
+- Every response is expected to include chunk citations like `[<chunk_id>]`.
+- Abstention guardrail when evidence is missing or weak:
+  - `I don't have enough evidence in the uploaded documents.`
+- Friendly error message if LM Studio is unavailable.
 
 ## Requirements
 
 - Python 3.10+
 - [LM Studio](https://lmstudio.ai/) running locally with a model loaded
-- LM Studio local server enabled (default: `http://localhost:1234/v1`)
+- LM Studio local server enabled (OpenAI-compatible API)
 
 ## Installation
 
@@ -37,31 +35,56 @@ pip install -e .[dev]
 cp .env.example .env
 ```
 
-2. Update values in `.env` as needed (especially `LLM_MODEL`).
+2. Set environment values in `.env`:
 
-## Run
+```env
+LLM_BASE_URL=http://localhost:1234/v1
+LLM_API_KEY=lm-studio
+LLM_MODEL=<your-lm-studio-model-id>
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+VECTOR_STORE_DIR=.rag_store
+```
+
+## Run LM Studio
+
+1. Open LM Studio.
+2. Download/load a chat-capable model.
+3. Start the local server (`Developer` tab).
+4. Confirm base URL and model id match your `.env` values.
+
+## Run the app
 
 ```bash
 python -m ui.app
 ```
 
-The app starts a minimal Gradio page and validates configuration loading.
+## How to use
 
-## Project structure
+### 1) Index documents
 
-```text
-rag-assistant-app/
-  README.md
-  pyproject.toml
-  .env.example
-  .gitignore
-  src/rag_assistant_app/
-    __init__.py
-    config.py
-    logging.py
-  ui/
-    __init__.py
-    app.py
-  docs/
-    architecture.md
-```
+- In the sidebar, set:
+  - `chunk_size`
+  - `chunk_overlap`
+  - optional `Rebuild index` to clear existing vectors
+- Upload `.txt` or `.md` files.
+- Click **Index documents**.
+
+### 2) Chat over indexed data
+
+- Set retrieval controls:
+  - `top_k`: number of chunks to retrieve
+  - `score_threshold`: minimum top score required to answer
+- Ask questions in the chat panel.
+- Expand **Retrieved chunks (last turn)** to inspect evidence used.
+
+## Citations and abstention behavior
+
+- The model is prompted to answer only from retrieved context.
+- Responses should cite chunk ids in square brackets, for example `[mydoc.md-0-a1b2c3d4e5f6]`.
+- If no chunks are retrieved, or retrieval confidence is below `score_threshold`, the app abstains with:
+  - `I don't have enough evidence in the uploaded documents.`
+
+## Notes
+
+- If LM Studio is down or unreachable, the app returns a friendly warning in chat instead of crashing.
+- The vector store persists locally at `VECTOR_STORE_DIR`.
