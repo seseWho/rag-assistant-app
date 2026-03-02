@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import BinaryIO
+
+logger = logging.getLogger(__name__)
 
 from rag_assistant_app.embeddings.embedder import create_embedder
 from rag_assistant_app.ingestion.chunking import chunk_text
@@ -60,7 +63,16 @@ class RagService:
                 )
         if chunk_records:
             self.vector_store.upsert_chunks(chunk_records)
-        return IndexSummary(docs_indexed=len(documents), chunks_indexed=len(chunk_records))
+        summary = IndexSummary(docs_indexed=len(documents), chunks_indexed=len(chunk_records))
+        logger.info("index_documents: %s", summary)
+        return summary
 
     def retrieve(self, query: str, top_k: int = 3) -> list[RetrievedChunk]:
-        return self.retriever.retrieve(query, top_k)
+        results = self.retriever.retrieve(query, top_k)
+        logger.info(
+            "retrieve: query=%r → %d chunk(s) returned (top score=%.4f)",
+            query,
+            len(results),
+            results[0].score if results else float("nan"),
+        )
+        return results

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 
 import requests
 
 from rag_assistant_app.config import get_config
+
+logger = logging.getLogger(__name__)
 
 
 class LlmServiceError(RuntimeError):
@@ -42,6 +45,7 @@ class OpenAICompatClient:
         }
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
+        logger.debug("POST %s  model=%s  messages=%d", endpoint, self.model, len(messages))
         try:
             response = requests.post(
                 endpoint,
@@ -52,11 +56,15 @@ class OpenAICompatClient:
             response.raise_for_status()
             data = response.json()
         except requests.RequestException as exc:
+            logger.error("LLM request failed: %s", exc, exc_info=True)
             raise LlmServiceError(
                 "Could not reach the language model server. Please verify LM Studio is running."
             ) from exc
 
         try:
-            return str(data["choices"][0]["message"]["content"]).strip()
+            content = str(data["choices"][0]["message"]["content"]).strip()
+            logger.debug("LLM response: %d chars", len(content))
+            return content
         except (KeyError, IndexError, TypeError) as exc:
+            logger.error("Unexpected LLM response format: %s", data, exc_info=True)
             raise LlmServiceError("Language model response format was invalid.") from exc

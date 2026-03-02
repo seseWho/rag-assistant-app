@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from hashlib import sha1
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -47,4 +50,8 @@ def chunk_text(
         chunks.append(
             Chunk(doc_id=doc_id, filename=filename, chunk_id=chunk_id, text=chunk_text_value)
         )
+    logger.info(
+        "chunk_text: doc=%s → %d chunk(s) (size=%d, overlap=%d)",
+        doc_id, len(chunks), chunk_size, chunk_overlap,
+    )
     return chunks

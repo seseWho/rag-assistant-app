@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 from rag_assistant_app.llm import LlmServiceError, OpenAICompatClient
 from rag_assistant_app.prompts import SYSTEM_PROMPT, build_user_prompt
@@ -52,10 +55,15 @@ class ChatService:
     ) -> ChatResult:
         chunks = self.rag_service.retrieve(question, top_k=top_k)
         if not chunks:
+            logger.info("answer: no chunks retrieved → abstaining")
             return ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=[])
 
         best_score = chunks[0].score
         if best_score < score_threshold:
+            logger.info(
+                "answer: best score %.4f < threshold %.4f → abstaining",
+                best_score, score_threshold,
+            )
             return ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=chunks)
 
         context_block = self._to_context_block(chunks)
@@ -70,13 +78,16 @@ class ChatService:
             }
         )
 
+        logger.info("answer: sending %d message(s) to LLM (top_k=%d, threshold=%.4f)", len(messages), top_k, score_threshold)
         try:
             answer = self.llm_client.chat_completion(
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+            logger.info("answer: LLM responded (%d chars)", len(answer) if answer else 0)
         except LlmServiceError as exc:
+            logger.error("answer: LLM error: %s", exc)
             answer = f"⚠️ {exc}"
 
         return ChatResult(answer=answer or ABSTAIN_MESSAGE, retrieved_chunks=chunks)

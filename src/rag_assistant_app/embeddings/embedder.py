@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from hashlib import sha1
 from math import sqrt
 from typing import Protocol
 
 from rag_assistant_app.config import get_embedding_model
+
+logger = logging.getLogger(__name__)
 
 
 class Embedder(Protocol):
@@ -43,7 +46,9 @@ class SentenceTransformerEmbedder:
     def __init__(self, model_name: str) -> None:
         from sentence_transformers import SentenceTransformer
 
+        logger.info("Loading SentenceTransformer model: %s", model_name)
         self._model = SentenceTransformer(model_name)
+        logger.info("SentenceTransformer model loaded: %s", model_name)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         vectors = self._model.encode(texts, normalize_embeddings=True)
@@ -57,6 +62,13 @@ class SentenceTransformerEmbedder:
 def create_embedder() -> Embedder:
     model_name = get_embedding_model()
     try:
-        return SentenceTransformerEmbedder(model_name)
+        embedder = SentenceTransformerEmbedder(model_name)
+        logger.info("Using SentenceTransformerEmbedder (model=%s, dim=inferred)", model_name)
+        return embedder
     except Exception:
+        logger.warning(
+            "Failed to load SentenceTransformer model '%s'; falling back to HashingEmbedder.",
+            model_name,
+            exc_info=True,
+        )
         return HashingEmbedder()

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /d/DEVELOP/GitHub/SeseWho/rag-assistant-app log --oneline -20)"
+    ]
+  }
+}

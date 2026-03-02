@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import gradio as gr
 
 from rag_assistant_app.config import get_config
 from rag_assistant_app.logging import configure_logging
-from rag_assistant_app.service.chat_service import ChatService
 
+# Configure logging before any service is instantiated so that startup
+# messages (e.g. embedding model load) are captured.
+configure_logging()
+
+from rag_assistant_app.service.chat_service import ChatService  # noqa: E402
+
+logger = logging.getLogger(__name__)
+
+logger.info("Initialising ChatService…")
 chat_service = ChatService()
+logger.info("ChatService ready.")
 
 
 def _format_retrieved_chunks(chunks: list[Any]) -> str:
@@ -39,7 +49,13 @@ def _index_documents(
     if not files:
         return "Please upload one or more `.txt` or `.md` files first."
 
-    with_handles = [open(file.name, "rb") for file in files]
+    logger.info("_index_documents: %d file(s) received, rebuild=%s", len(files), rebuild_index)
+    # Gradio may pass NamedString (str subclass) or file-like objects.
+    # Normalise to open binary handles using the path in all cases.
+    paths = [f if isinstance(f, str) else f.name for f in files]
+    logger.debug("File paths: %s", paths)
+
+    with_handles = [open(p, "rb") for p in paths]
     try:
         summary = chat_service.rag_service.index_documents(
             with_handles,
@@ -47,12 +63,15 @@ def _index_documents(
             chunk_overlap=chunk_overlap,
             rebuild_index=rebuild_index,
         )
+    except Exception:
+        logger.exception("Indexing failed")
+        return "❌ Indexing failed — check the console/logs for details."
     finally:
         for handle in with_handles:
             handle.close()
 
     return (
-        "Indexing complete. "
+        "✅ Indexing complete. "
         f"Docs indexed: {summary.docs_indexed}. Chunks indexed: {summary.chunks_indexed}."
     )
 
@@ -64,12 +83,23 @@ def _chat_turn(
     score_threshold: float,
 ):
     history = history or []
-    result = chat_service.answer(
-        question=message,
-        conversation_history=history,
-        top_k=top_k,
-        score_threshold=score_threshold,
-    )
+    logger.info("_chat_turn: question=%r, top_k=%d, threshold=%.4f", message, top_k, score_threshold)
+    try:
+        result = chat_service.answer(
+            question=message,
+            conversation_history=history,
+            top_k=top_k,
+            score_threshold=score_threshold,
+        )
+    except Exception:
+        logger.exception("_chat_turn: unexpected error")
+        error_msg = (
+            "❌ An unexpected error occurred — check the console/logs for details.\n\n"
+            "**Tip:** if you see a dimension mismatch error, enable 'Rebuild index' and re-index your documents."
+        )
+        updated_history = history + [(message, error_msg)]
+        return updated_history, updated_history, "Error during retrieval."
+
     updated_history = history + [(message, result.answer)]
     return updated_history, updated_history, _format_retrieved_chunks(result.retrieved_chunks)
 
@@ -150,6 +180,5 @@ def build_app() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    configure_logging()
     app = build_app()
     app.launch()
