@@ -47,7 +47,7 @@ def _index_documents(
     rebuild_index: bool,
 ) -> str:
     if not files:
-        return "Please upload one or more `.txt` or `.md` files first."
+        return "Please upload one or more `.txt`, `.md`, `.pdf` or `.docx` files first."
 
     logger.info("_index_documents: %d file(s) received, rebuild=%s", len(files), rebuild_index)
     # Gradio may pass NamedString (str subclass) or file-like objects.
@@ -159,9 +159,9 @@ def build_app() -> gr.Blocks:
 
                 gr.Markdown("## Upload & Index")
                 uploads = gr.File(
-                    label="Upload documents (.txt, .md)",
+                    label="Upload documents (.txt, .md, .pdf, .docx)",
                     file_count="multiple",
-                    file_types=[".txt", ".md"],
+                    file_types=[".txt", ".md", ".pdf", ".docx"],
                 )
                 rebuild_index = gr.Checkbox(
                     label="Rebuild index (clear existing chunks first)", value=False

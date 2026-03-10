@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from typing import BinaryIO
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {".txt", ".md"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".pdf", ".docx"}
 
 
 @dataclass(slots=True)
@@ -36,9 +37,31 @@ def _read_text_from_bytes(raw: bytes, filename: str = "") -> str:
     return _normalize_line_endings(raw.decode("utf-8", errors="replace"))
 
 
-def load_documents(files: Iterable[BinaryIO]) -> list[LoadedDocument]:
-    """Load uploaded txt/md files into memory.
+def _load_pdf(raw: bytes, filename: str) -> str:
+    import fitz  # pymupdf
 
+    doc = fitz.open(stream=raw, filetype="pdf")
+    pages = [page.get_text() for page in doc]
+    doc.close()
+    text = "\n\n".join(pages)
+    logger.info("PDF loaded: %s (%d pages, %d chars)", filename, len(pages), len(text))
+    return _normalize_line_endings(text)
+
+
+def _load_docx(raw: bytes, filename: str) -> str:
+    import docx
+
+    doc = docx.Document(io.BytesIO(raw))
+    paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+    text = "\n\n".join(paragraphs)
+    logger.info("DOCX loaded: %s (%d paragraphs, %d chars)", filename, len(paragraphs), len(text))
+    return _normalize_line_endings(text)
+
+
+def load_documents(files: Iterable[BinaryIO]) -> list[LoadedDocument]:
+    """Load uploaded documents into memory.
+
+    Supports .txt, .md, .pdf and .docx.
     Expects file-like objects with a ``name`` attribute and ``read()`` method.
     """
     docs: list[LoadedDocument] = []
@@ -53,9 +76,15 @@ def load_documents(files: Iterable[BinaryIO]) -> list[LoadedDocument]:
         logger.debug("Loading file: %s (raw path: %s)", filename, raw_name)
         raw = file.read()
         if isinstance(raw, str):
-            text = _normalize_line_endings(raw)
+            raw = raw.encode("utf-8")
+
+        if suffix == ".pdf":
+            text = _load_pdf(raw, filename)
+        elif suffix == ".docx":
+            text = _load_docx(raw, filename)
         else:
             text = _read_text_from_bytes(raw, filename)
+
         logger.info("Loaded document: %s (%d chars)", filename, len(text))
         docs.append(LoadedDocument(doc_id=filename, filename=filename, text=text))
     logger.info("load_documents: %d document(s) loaded", len(docs))
