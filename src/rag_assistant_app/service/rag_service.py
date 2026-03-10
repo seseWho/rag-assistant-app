@@ -69,6 +69,16 @@ class RagService:
         logger.info("index_documents: %s", summary)
         return summary
 
+    def list_documents(self) -> dict[str, int]:
+        """Return {doc_id: chunk_count} for all indexed documents."""
+        return self.vector_store.list_documents()
+
+    def delete_document(self, doc_id: str) -> int:
+        """Delete all chunks for doc_id. Returns chunk count removed."""
+        count = self.vector_store.delete_document(doc_id)
+        logger.info("delete_document: doc_id=%s, removed=%d", doc_id, count)
+        return count
+
     def retrieve(self, query: str, top_k: int = 3) -> list[RetrievedChunk]:
         fetch_k = top_k * RERANK_CANDIDATES_MULTIPLIER if self.reranker else top_k
         results = self.retriever.retrieve(query, fetch_k)

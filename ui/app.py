@@ -40,18 +40,31 @@ def _format_retrieved_chunks(chunks: list[Any]) -> str:
     return "\n".join(lines)
 
 
+def _doc_list_markdown() -> str:
+    docs = chat_service.rag_service.list_documents()
+    if not docs:
+        return "_No documents indexed yet._"
+    lines = ["| Document | Chunks |", "|---|---|"]
+    for doc_id, count in docs.items():
+        lines.append(f"| `{doc_id}` | {count} |")
+    return "\n".join(lines)
+
+
+def _doc_choices() -> list[str]:
+    return list(chat_service.rag_service.list_documents().keys())
+
+
 def _index_documents(
     files: list[Any] | None,
     chunk_size: int,
     chunk_overlap: int,
     rebuild_index: bool,
-) -> str:
+) -> tuple[str, str, Any]:
     if not files:
-        return "Please upload one or more `.txt`, `.md`, `.pdf` or `.docx` files first."
+        msg = "Please upload one or more `.txt`, `.md`, `.pdf` or `.docx` files first."
+        return msg, _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
 
     logger.info("_index_documents: %d file(s) received, rebuild=%s", len(files), rebuild_index)
-    # Gradio may pass NamedString (str subclass) or file-like objects.
-    # Normalise to open binary handles using the path in all cases.
     paths = [f if isinstance(f, str) else f.name for f in files]
     logger.debug("File paths: %s", paths)
 
@@ -65,15 +78,29 @@ def _index_documents(
         )
     except Exception:
         logger.exception("Indexing failed")
-        return "❌ Indexing failed — check the console/logs for details."
+        msg = "❌ Indexing failed — check the console/logs for details."
+        return msg, _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
     finally:
         for handle in with_handles:
             handle.close()
 
-    return (
+    msg = (
         "✅ Indexing complete. "
         f"Docs indexed: {summary.docs_indexed}. Chunks indexed: {summary.chunks_indexed}."
     )
+    return msg, _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
+
+
+def _delete_document(doc_id: str) -> tuple[str, str, Any]:
+    if not doc_id:
+        return "Select a document to delete.", _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
+    count = chat_service.rag_service.delete_document(doc_id)
+    msg = f"✅ Deleted `{doc_id}` ({count} chunk(s) removed)."
+    return msg, _doc_list_markdown(), gr.Dropdown(choices=_doc_choices(), value=None)
+
+
+def _refresh_docs() -> tuple[str, Any]:
+    return _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
 
 
 def _history_to_pairs(history: list[dict]) -> list[tuple[str, str]]:
@@ -180,6 +207,19 @@ def build_app() -> gr.Blocks:
                 index_button = gr.Button("Index documents", variant="primary")
                 index_status = gr.Markdown()
 
+                gr.Markdown("## Indexed Documents")
+                doc_list = gr.Markdown(value=_doc_list_markdown)
+                with gr.Row():
+                    doc_selector = gr.Dropdown(
+                        label="Select document",
+                        choices=_doc_choices(),
+                        value=None,
+                        interactive=True,
+                    )
+                    refresh_button = gr.Button("↺", scale=0)
+                delete_button = gr.Button("Delete selected", variant="stop")
+                delete_status = gr.Markdown()
+
             with gr.Column(scale=2):
                 gr.Markdown("## Chat")
                 chatbot = gr.Chatbot(label="RAG chat", height=450)
@@ -194,7 +234,19 @@ def build_app() -> gr.Blocks:
         index_button.click(
             fn=_index_documents,
             inputs=[uploads, chunk_size, chunk_overlap, rebuild_index],
-            outputs=[index_status],
+            outputs=[index_status, doc_list, doc_selector],
+        )
+
+        delete_button.click(
+            fn=_delete_document,
+            inputs=[doc_selector],
+            outputs=[delete_status, doc_list, doc_selector],
+        )
+
+        refresh_button.click(
+            fn=_refresh_docs,
+            inputs=[],
+            outputs=[doc_list, doc_selector],
         )
 
         send.click(

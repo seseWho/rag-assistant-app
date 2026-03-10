@@ -70,6 +70,28 @@ class LocalVectorStore:
             )
         return sum(x * y for x, y in zip(a, b))
 
+    def list_documents(self) -> dict[str, int]:
+        """Return {doc_id: chunk_count} for all indexed documents, sorted by doc_id."""
+        counts: dict[str, int] = {}
+        for record in self._records.values():
+            doc_id = record["metadata"].get("doc_id", "unknown")
+            counts[doc_id] = counts.get(doc_id, 0) + 1
+        return dict(sorted(counts.items()))
+
+    def delete_document(self, doc_id: str) -> int:
+        """Remove all chunks for doc_id. Returns number of chunks removed."""
+        to_remove = [
+            chunk_id
+            for chunk_id, record in self._records.items()
+            if record["metadata"].get("doc_id") == doc_id
+        ]
+        for chunk_id in to_remove:
+            del self._records[chunk_id]
+        if to_remove:
+            self._persist()
+        logger.info("delete_document: removed %d chunk(s) for doc_id=%s", len(to_remove), doc_id)
+        return len(to_remove)
+
     def clear(self) -> None:
         self._records = {}
         self._persist()
