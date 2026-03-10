@@ -9,5 +9,5 @@ class Retriever:
     def __init__(self, vector_store: LocalVectorStore) -> None:
         self.vector_store = vector_store
 
-    def retrieve(self, query: str, top_k: int = 3) -> list[RetrievedChunk]:
-        return self.vector_store.query(query, top_k)
+    def retrieve(self, query: str, top_k: int = 3, doc_filter: set[str] | None = None) -> list[RetrievedChunk]:
+        return self.vector_store.query(query, top_k, doc_filter=doc_filter)

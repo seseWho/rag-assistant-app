@@ -79,9 +79,9 @@ class RagService:
         logger.info("delete_document: doc_id=%s, removed=%d", doc_id, count)
         return count
 
-    def retrieve(self, query: str, top_k: int = 3) -> list[RetrievedChunk]:
+    def retrieve(self, query: str, top_k: int = 3, doc_filter: set[str] | None = None) -> list[RetrievedChunk]:
         fetch_k = top_k * RERANK_CANDIDATES_MULTIPLIER if self.reranker else top_k
-        results = self.retriever.retrieve(query, fetch_k)
+        results = self.retriever.retrieve(query, fetch_k, doc_filter=doc_filter)
 
         if self.reranker and results:
             results = self.reranker.rerank(query, results, top_k)

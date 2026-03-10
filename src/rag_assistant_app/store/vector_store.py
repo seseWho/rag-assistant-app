@@ -97,14 +97,18 @@ class LocalVectorStore:
         self._persist()
         logger.info("Vector store cleared.")
 
-    def query(self, text: str, top_k: int) -> list[RetrievedChunk]:
+    def query(self, text: str, top_k: int, doc_filter: set[str] | None = None) -> list[RetrievedChunk]:
         if not self._records:
             logger.info("query: vector store is empty, returning no results")
             return []
         query_embedding = self.embedder.embed_query(text)
+        candidates = self._records.values()
+        if doc_filter:
+            candidates = [r for r in candidates if r["metadata"].get("doc_id") in doc_filter]
+            logger.debug("query: doc_filter=%s → %d candidate(s)", doc_filter, len(candidates))
         logger.debug("query: query_embedding dim=%d, searching %d records", len(query_embedding), len(self._records))
         scored: list[RetrievedChunk] = []
-        for item in self._records.values():
+        for item in candidates:
             try:
                 score = self._dot(query_embedding, item["embedding"])
             except ValueError:

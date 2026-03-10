@@ -123,9 +123,14 @@ def _chat_turn(
     history: list[dict] | None,
     top_k: int,
     score_threshold: float,
+    doc_filter: list[str] | None,
 ):
     history = list(history or [])
-    logger.info("_chat_turn: question=%r, top_k=%d, threshold=%.4f", message, top_k, score_threshold)
+    active_filter: set[str] | None = set(doc_filter) if doc_filter else None
+    logger.info(
+        "_chat_turn: question=%r, top_k=%d, threshold=%.4f, doc_filter=%s",
+        message, top_k, score_threshold, active_filter,
+    )
 
     # Show the user message and a placeholder immediately
     history = history + [
@@ -141,6 +146,7 @@ def _chat_turn(
             conversation_history=_history_to_pairs(history[:-2]),
             top_k=top_k,
             score_threshold=score_threshold,
+            doc_filter=active_filter,
         ):
             history[-1]["content"] = result.answer + "▌"
             yield history, history, "Streaming…"
@@ -223,6 +229,13 @@ def build_app() -> gr.Blocks:
             with gr.Column(scale=2):
                 gr.Markdown("## Chat")
                 chatbot = gr.Chatbot(label="RAG chat", height=450)
+                chat_doc_filter = gr.Dropdown(
+                    label="Filter by document (empty = all docs)",
+                    choices=_doc_choices(),
+                    value=[],
+                    multiselect=True,
+                    interactive=True,
+                )
                 user_input = gr.Textbox(
                     label="Ask a question",
                     placeholder="What is in my uploaded docs?",
@@ -231,32 +244,44 @@ def build_app() -> gr.Blocks:
                 with gr.Accordion("Retrieved chunks (last turn)", open=False):
                     retrieved_chunks = gr.Markdown("No turns yet.")
 
+        def _index_and_refresh(files, chunk_size, chunk_overlap, rebuild_index):
+            status, doc_md, selector = _index_documents(files, chunk_size, chunk_overlap, rebuild_index)
+            return status, doc_md, selector, gr.Dropdown(choices=_doc_choices(), value=[])
+
+        def _delete_and_refresh(doc_id):
+            status, doc_md, selector = _delete_document(doc_id)
+            return status, doc_md, selector, gr.Dropdown(choices=_doc_choices(), value=[])
+
+        def _refresh_all():
+            doc_md, selector = _refresh_docs()
+            return doc_md, selector, gr.Dropdown(choices=_doc_choices())
+
         index_button.click(
-            fn=_index_documents,
+            fn=_index_and_refresh,
             inputs=[uploads, chunk_size, chunk_overlap, rebuild_index],
-            outputs=[index_status, doc_list, doc_selector],
+            outputs=[index_status, doc_list, doc_selector, chat_doc_filter],
         )
 
         delete_button.click(
-            fn=_delete_document,
+            fn=_delete_and_refresh,
             inputs=[doc_selector],
-            outputs=[delete_status, doc_list, doc_selector],
+            outputs=[delete_status, doc_list, doc_selector, chat_doc_filter],
         )
 
         refresh_button.click(
-            fn=_refresh_docs,
+            fn=_refresh_all,
             inputs=[],
-            outputs=[doc_list, doc_selector],
+            outputs=[doc_list, doc_selector, chat_doc_filter],
         )
 
         send.click(
             fn=_chat_turn,
-            inputs=[user_input, history_state, top_k, score_threshold],
+            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter],
             outputs=[chatbot, history_state, retrieved_chunks],
         )
         user_input.submit(
             fn=_chat_turn,
-            inputs=[user_input, history_state, top_k, score_threshold],
+            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter],
             outputs=[chatbot, history_state, retrieved_chunks],
         )
 

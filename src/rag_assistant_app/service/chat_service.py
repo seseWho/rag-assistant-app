@@ -60,14 +60,14 @@ class ChatService:
         return messages
 
     def _retrieve_and_check(
-        self, question: str, top_k: int, score_threshold: float
+        self, question: str, top_k: int, score_threshold: float, doc_filter: set[str] | None = None
     ) -> tuple[list[RetrievedChunk], bool]:
         """Return (chunks, should_abstain).
 
         Uses max embedding score across all chunks for the threshold check so
         that reranking (which reorders chunks) does not affect abstention logic.
         """
-        chunks = self.rag_service.retrieve(question, top_k=top_k)
+        chunks = self.rag_service.retrieve(question, top_k=top_k, doc_filter=doc_filter)
         if not chunks:
             logger.info("answer: no chunks retrieved → abstaining")
             return [], True
@@ -88,10 +88,11 @@ class ChatService:
         conversation_history: list[tuple[str, str]],
         top_k: int,
         score_threshold: float,
+        doc_filter: set[str] | None = None,
         temperature: float = 0.0,
         max_tokens: int = 600,
     ) -> ChatResult:
-        chunks, should_abstain = self._retrieve_and_check(question, top_k, score_threshold)
+        chunks, should_abstain = self._retrieve_and_check(question, top_k, score_threshold, doc_filter=doc_filter)
         if should_abstain:
             return ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=chunks)
 
@@ -117,11 +118,12 @@ class ChatService:
         conversation_history: list[tuple[str, str]],
         top_k: int,
         score_threshold: float,
+        doc_filter: set[str] | None = None,
         temperature: float = 0.0,
         max_tokens: int = 600,
     ) -> Iterator[ChatResult]:
         """Yield ChatResult objects with growing answer text as the LLM streams tokens."""
-        chunks, should_abstain = self._retrieve_and_check(question, top_k, score_threshold)
+        chunks, should_abstain = self._retrieve_and_check(question, top_k, score_threshold, doc_filter=doc_filter)
         if should_abstain:
             yield ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=chunks)
             return
