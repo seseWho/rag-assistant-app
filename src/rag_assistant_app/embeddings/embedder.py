@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
-from hashlib import sha1
+from hashlib import sha1, sha256
 from math import sqrt
+from pathlib import Path
 from typing import Protocol
 
 logger = logging.getLogger(__name__)
@@ -96,17 +98,96 @@ def _normalize(vector: list[float]) -> list[float]:
     return [v / norm for v in vector]
 
 
+class CachedEmbedder:
+    """Transparent caching wrapper around any Embedder.
+
+    Embeddings are persisted to a JSON file keyed by SHA-256 of the text.
+    The cache is automatically invalidated when the model identifier changes.
+    """
+
+    def __init__(self, embedder: Embedder, model_id: str, cache_path: Path) -> None:
+        self._embedder = embedder
+        self._model_id = model_id
+        self._cache_path = cache_path
+        self._cache: dict[str, list[float]] = {}
+        self._load()
+
+    @staticmethod
+    def _key(text: str) -> str:
+        return sha256(text.encode("utf-8")).hexdigest()
+
+    def _load(self) -> None:
+        if not self._cache_path.exists():
+            return
+        try:
+            data = json.loads(self._cache_path.read_text(encoding="utf-8"))
+            if data.get("model") != self._model_id:
+                logger.info(
+                    "Embedding cache: model changed ('%s' → '%s'), invalidating cache.",
+                    data.get("model"),
+                    self._model_id,
+                )
+                return
+            self._cache = data.get("embeddings", {})
+            logger.info(
+                "Embedding cache loaded: %d entry/ies from %s", len(self._cache), self._cache_path
+            )
+        except Exception:
+            logger.warning("Failed to load embedding cache; starting fresh.", exc_info=True)
+
+    def _save(self) -> None:
+        try:
+            self._cache_path.parent.mkdir(parents=True, exist_ok=True)
+            self._cache_path.write_text(
+                json.dumps(
+                    {"model": self._model_id, "embeddings": self._cache}, ensure_ascii=False
+                ),
+                encoding="utf-8",
+            )
+            logger.debug("Embedding cache saved: %d entry/ies", len(self._cache))
+        except Exception:
+            logger.warning("Failed to save embedding cache.", exc_info=True)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        keys = [self._key(t) for t in texts]
+        misses = [(i, texts[i]) for i, k in enumerate(keys) if k not in self._cache]
+
+        if misses:
+            logger.debug(
+                "Embedding cache: %d hit(s), %d miss(es) — calling embedder.",
+                len(texts) - len(misses),
+                len(misses),
+            )
+            miss_indices, miss_texts = zip(*misses)
+            new_embeddings = self._embedder.embed_documents(list(miss_texts))
+            for idx, emb in zip(miss_indices, new_embeddings):
+                self._cache[keys[idx]] = emb
+            self._save()
+        else:
+            logger.debug("Embedding cache: all %d text(s) served from cache.", len(texts))
+
+        return [self._cache[k] for k in keys]
+
+    def embed_query(self, text: str) -> list[float]:
+        key = self._key(text)
+        if key not in self._cache:
+            self._cache[key] = self._embedder.embed_query(text)
+            self._save()
+        return self._cache[key]
+
+
 def create_embedder() -> Embedder:
-    from rag_assistant_app.config import get_config
+    from rag_assistant_app.config import get_config, get_vector_store_dir
 
     config = get_config()
+    cache_path = get_vector_store_dir() / "embedding_cache.json"
 
     # Try LM Studio embedding API first
     try:
-        embedder = LMStudioEmbedder(config.llm_base_url, config.embedding_model, config.llm_api_key)
-        embedder.embed_query("ping")  # verify the model is reachable
+        base = LMStudioEmbedder(config.llm_base_url, config.embedding_model, config.llm_api_key)
+        base.embed_query("ping")  # verify the model is reachable
         logger.info("Using LMStudioEmbedder (model=%s)", config.embedding_model)
-        return embedder
+        return CachedEmbedder(base, config.embedding_model, cache_path)
     except Exception as exc:
         logger.warning(
             "LM Studio embedding not available (model=%s, url=%s): %s. "
@@ -116,4 +197,5 @@ def create_embedder() -> Embedder:
             config.llm_base_url,
             exc,
         )
-        return HashingEmbedder()
+        base_hashing = HashingEmbedder()
+        return CachedEmbedder(base_hashing, f"hashing:{base_hashing.dim}", cache_path)
