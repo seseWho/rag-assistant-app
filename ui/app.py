@@ -97,32 +97,43 @@ def _chat_turn(
     top_k: int,
     score_threshold: float,
 ):
-    history = history or []
+    history = list(history or [])
     logger.info("_chat_turn: question=%r, top_k=%d, threshold=%.4f", message, top_k, score_threshold)
+
+    # Show the user message and a placeholder immediately
+    history = history + [
+        {"role": "user", "content": message},
+        {"role": "assistant", "content": "▌"},
+    ]
+    yield history, history, "Retrieving…"
+
+    result = None
     try:
-        result = chat_service.answer(
+        for result in chat_service.answer_stream(
             question=message,
-            conversation_history=_history_to_pairs(history),
+            conversation_history=_history_to_pairs(history[:-2]),
             top_k=top_k,
             score_threshold=score_threshold,
-        )
+        ):
+            history[-1]["content"] = result.answer + "▌"
+            yield history, history, "Streaming…"
     except Exception:
         logger.exception("_chat_turn: unexpected error")
         error_msg = (
             "❌ An unexpected error occurred — check the console/logs for details.\n\n"
             "**Tip:** if you see a dimension mismatch error, enable 'Rebuild index' and re-index your documents."
         )
-        updated_history = history + [
-            {"role": "user", "content": message},
-            {"role": "assistant", "content": error_msg},
-        ]
-        return updated_history, updated_history, "Error during retrieval."
+        history[-1]["content"] = error_msg
+        yield history, history, "Error during retrieval."
+        return
 
-    updated_history = history + [
-        {"role": "user", "content": message},
-        {"role": "assistant", "content": result.answer},
-    ]
-    return updated_history, updated_history, _format_retrieved_chunks(result.retrieved_chunks)
+    if result is None:
+        history[-1]["content"] = "❌ No response received."
+        yield history, history, ""
+        return
+
+    history[-1]["content"] = result.answer
+    yield history, history, _format_retrieved_chunks(result.retrieved_chunks)
 
 
 def build_app() -> gr.Blocks:

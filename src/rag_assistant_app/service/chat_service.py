@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,38 @@ class ChatService:
             )
         return "\n\n---\n\n".join(blocks)
 
+    def _build_messages(
+        self,
+        question: str,
+        context_block: str,
+        conversation_history: list[tuple[str, str]],
+    ) -> list[dict[str, str]]:
+        messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for user_msg, assistant_msg in conversation_history:
+            messages.append({"role": "user", "content": user_msg})
+            messages.append({"role": "assistant", "content": assistant_msg})
+        messages.append(
+            {"role": "user", "content": build_user_prompt(question=question, context_block=context_block)}
+        )
+        return messages
+
+    def _retrieve_and_check(
+        self, question: str, top_k: int, score_threshold: float
+    ) -> tuple[list[RetrievedChunk], bool]:
+        """Return (chunks, should_abstain)."""
+        chunks = self.rag_service.retrieve(question, top_k=top_k)
+        if not chunks:
+            logger.info("answer: no chunks retrieved → abstaining")
+            return [], True
+        if chunks[0].score < score_threshold:
+            logger.info(
+                "answer: best score %.4f < threshold %.4f → abstaining",
+                chunks[0].score,
+                score_threshold,
+            )
+            return chunks, True
+        return chunks, False
+
     def answer(
         self,
         *,
@@ -53,31 +86,11 @@ class ChatService:
         temperature: float = 0.0,
         max_tokens: int = 600,
     ) -> ChatResult:
-        chunks = self.rag_service.retrieve(question, top_k=top_k)
-        if not chunks:
-            logger.info("answer: no chunks retrieved → abstaining")
-            return ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=[])
-
-        best_score = chunks[0].score
-        if best_score < score_threshold:
-            logger.info(
-                "answer: best score %.4f < threshold %.4f → abstaining",
-                best_score, score_threshold,
-            )
+        chunks, should_abstain = self._retrieve_and_check(question, top_k, score_threshold)
+        if should_abstain:
             return ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=chunks)
 
-        context_block = self._to_context_block(chunks)
-        messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for user_msg, assistant_msg in conversation_history:
-            messages.append({"role": "user", "content": user_msg})
-            messages.append({"role": "assistant", "content": assistant_msg})
-        messages.append(
-            {
-                "role": "user",
-                "content": build_user_prompt(question=question, context_block=context_block),
-            }
-        )
-
+        messages = self._build_messages(question, self._to_context_block(chunks), conversation_history)
         logger.info("answer: sending %d message(s) to LLM (top_k=%d, threshold=%.4f)", len(messages), top_k, score_threshold)
         try:
             answer = self.llm_client.chat_completion(
@@ -91,3 +104,39 @@ class ChatService:
             answer = f"⚠️ {exc}"
 
         return ChatResult(answer=answer or ABSTAIN_MESSAGE, retrieved_chunks=chunks)
+
+    def answer_stream(
+        self,
+        *,
+        question: str,
+        conversation_history: list[tuple[str, str]],
+        top_k: int,
+        score_threshold: float,
+        temperature: float = 0.0,
+        max_tokens: int = 600,
+    ) -> Iterator[ChatResult]:
+        """Yield ChatResult objects with growing answer text as the LLM streams tokens."""
+        chunks, should_abstain = self._retrieve_and_check(question, top_k, score_threshold)
+        if should_abstain:
+            yield ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=chunks)
+            return
+
+        messages = self._build_messages(question, self._to_context_block(chunks), conversation_history)
+        logger.info("answer_stream: sending %d message(s) to LLM", len(messages))
+
+        accumulated = ""
+        try:
+            for token in self.llm_client.chat_completion_stream(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            ):
+                accumulated += token
+                yield ChatResult(answer=accumulated, retrieved_chunks=chunks)
+        except LlmServiceError as exc:
+            logger.error("answer_stream: LLM error: %s", exc)
+            yield ChatResult(answer=f"⚠️ {exc}", retrieved_chunks=chunks)
+            return
+
+        if not accumulated:
+            yield ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=chunks)
