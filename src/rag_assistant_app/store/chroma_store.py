@@ -59,6 +59,15 @@ class ChromaVectorStore:
         logger.info("delete_document: removed %d chunk(s) for doc_id=%s", len(ids), doc_id)
         return len(ids)
 
+    def get_all_chunks(self) -> list[ChunkRecord]:
+        result = self._collection.get(include=["documents", "metadatas"])
+        docs = result["documents"] or []
+        metas = result["metadatas"] or []
+        return [
+            ChunkRecord(chunk_id=cid, text=doc, metadata=meta)
+            for cid, doc, meta in zip(result["ids"], docs, metas)
+        ]
+
     def clear(self) -> None:
         self._client.delete_collection(_COLLECTION_NAME)
         self._collection = self._client.get_or_create_collection(

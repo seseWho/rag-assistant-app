@@ -13,8 +13,8 @@ from rag_assistant_app.embeddings.embedder import create_embedder
 from rag_assistant_app.ingestion.chunking import chunk_text
 from rag_assistant_app.ingestion.loaders import load_documents
 from rag_assistant_app.ingestion.metadata import build_chunk_metadata
+from rag_assistant_app.retrieval.hybrid_retriever import HybridRetriever
 from rag_assistant_app.retrieval.reranker import RERANK_CANDIDATES_MULTIPLIER, create_reranker
-from rag_assistant_app.retrieval.retriever import Retriever
 from rag_assistant_app.store.vector_store import ChunkRecord, RetrievedChunk, VectorStore
 
 
@@ -52,7 +52,7 @@ class RagService:
     def __init__(self) -> None:
         embedder = create_embedder()
         self.vector_store = _create_vector_store(embedder)
-        self.retriever = Retriever(self.vector_store)
+        self.retriever = HybridRetriever(self.vector_store)
         self.reranker = create_reranker()
 
     def index_documents(
@@ -112,9 +112,11 @@ class RagService:
         logger.info("delete_document: doc_id=%s, removed=%d", doc_id, count)
         return count
 
-    def retrieve(self, query: str, top_k: int = 3, doc_filter: set[str] | None = None) -> list[RetrievedChunk]:
+    def retrieve(
+        self, query: str, top_k: int = 3, doc_filter: set[str] | None = None, hybrid: bool = False
+    ) -> list[RetrievedChunk]:
         fetch_k = top_k * RERANK_CANDIDATES_MULTIPLIER if self.reranker else top_k
-        results = self.retriever.retrieve(query, fetch_k, doc_filter=doc_filter)
+        results = self.retriever.retrieve(query, fetch_k, doc_filter=doc_filter, hybrid=hybrid)
 
         if self.reranker and results:
             results = self.reranker.rerank(query, results, top_k)

@@ -22,6 +22,7 @@ class VectorStore(Protocol):
     def list_documents(self) -> dict[str, int]: ...
     def delete_document(self, doc_id: str) -> int: ...
     def clear(self) -> None: ...
+    def get_all_chunks(self) -> list[ChunkRecord]: ...
     def query(self, text: str, top_k: int, doc_filter: set[str] | None = None) -> list[RetrievedChunk]: ...
 
 
@@ -108,6 +109,12 @@ class LocalVectorStore:
         self._records = {}
         self._persist()
         logger.info("Vector store cleared.")
+
+    def get_all_chunks(self) -> list[ChunkRecord]:
+        return [
+            ChunkRecord(chunk_id=r["chunk_id"], text=r["text"], metadata=r["metadata"])
+            for r in self._records.values()
+        ]
 
     def query(self, text: str, top_k: int, doc_filter: set[str] | None = None) -> list[RetrievedChunk]:
         if not self._records:

@@ -174,6 +174,7 @@ def _chat_turn(
     score_threshold: float,
     doc_filter: list[str] | None,
     system_prompt: str,
+    hybrid: bool,
 ):
     history = list(history or [])
     active_filter: set[str] | None = set(doc_filter) if doc_filter else None
@@ -198,6 +199,7 @@ def _chat_turn(
             score_threshold=score_threshold,
             doc_filter=active_filter,
             system_prompt=system_prompt,
+            hybrid=hybrid,
         ):
             history[-1]["content"] = result.answer + "▌"
             yield history, history, "Streaming…"
@@ -251,6 +253,10 @@ def build_app() -> gr.Blocks:
                     maximum=1.0,
                     step=0.01,
                     value=0.1,
+                )
+                hybrid_search = gr.Checkbox(
+                    label="Hybrid search (BM25 + embeddings)",
+                    value=config.hybrid_search,
                 )
 
                 gr.Markdown("## Upload & Index")
@@ -339,12 +345,12 @@ def build_app() -> gr.Blocks:
 
         send.click(
             fn=_chat_turn,
-            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter, system_prompt_box],
+            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter, system_prompt_box, hybrid_search],
             outputs=[chatbot, history_state, retrieved_chunks],
         )
         user_input.submit(
             fn=_chat_turn,
-            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter, system_prompt_box],
+            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter, system_prompt_box, hybrid_search],
             outputs=[chatbot, history_state, retrieved_chunks],
         )
 

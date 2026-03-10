@@ -23,6 +23,7 @@ class AppConfig:
     vector_store_dir: Path
     reranker_model: str  # empty string = disabled
     vector_store_backend: str  # "chroma" or "local"
+    hybrid_search: bool  # default for the UI checkbox
 
 
 def get_config() -> AppConfig:
@@ -37,6 +38,7 @@ def get_config() -> AppConfig:
         vector_store_dir=Path(os.getenv("VECTOR_STORE_DIR", ".rag_store")),
         reranker_model=os.getenv("RERANKER_MODEL", ""),
         vector_store_backend=os.getenv("VECTOR_STORE_BACKEND", "chroma"),
+        hybrid_search=os.getenv("HYBRID_SEARCH", "false").lower() in ("1", "true", "yes"),
     )
 
 
