@@ -56,3 +56,7 @@ def get_embedding_model() -> str:
 
 def get_vector_store_dir() -> Path:
     return get_config().vector_store_dir
+
+
+def get_chat_history_path() -> Path:
+    return get_vector_store_dir() / "chat_history.json"

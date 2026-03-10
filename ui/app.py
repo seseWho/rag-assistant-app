@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 import gradio as gr
 
-from rag_assistant_app.config import get_config
+from rag_assistant_app.config import get_chat_history_path, get_config
 from rag_assistant_app.logging import configure_logging
 
 # Configure logging before any service is instantiated so that startup
@@ -17,6 +18,30 @@ configure_logging()
 from rag_assistant_app.service.chat_service import ChatService  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+
+def _load_history() -> list[dict]:
+    path = get_chat_history_path()
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                logger.info("Chat history loaded: %d message(s) from %s", len(data), path)
+                return data
+        except Exception:
+            logger.warning("Failed to load chat history from %s; starting fresh.", path, exc_info=True)
+    return []
+
+
+def _save_history(history: list[dict]) -> None:
+    path = get_chat_history_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(history, ensure_ascii=False), encoding="utf-8")
+        logger.debug("Chat history saved: %d message(s) to %s", len(history), path)
+    except Exception:
+        logger.warning("Failed to save chat history to %s.", path, exc_info=True)
+
 
 logger.info("Initialising ChatService…")
 chat_service = ChatService()
@@ -166,6 +191,7 @@ def _chat_turn(
         return
 
     history[-1]["content"] = result.answer
+    _save_history(history)
     yield history, history, _format_retrieved_chunks(result.retrieved_chunks)
 
 
@@ -181,7 +207,7 @@ def build_app() -> gr.Blocks:
             f"Embeddings: `{config.embedding_model}`"
         )
 
-        history_state = gr.State([])
+        history_state = gr.State(_load_history)
 
         with gr.Row():
             with gr.Column(scale=1):
@@ -240,7 +266,9 @@ def build_app() -> gr.Blocks:
                     label="Ask a question",
                     placeholder="What is in my uploaded docs?",
                 )
-                send = gr.Button("Send", variant="primary")
+                with gr.Row():
+                    send = gr.Button("Send", variant="primary")
+                    clear_history = gr.Button("Clear history", variant="stop", scale=0)
                 with gr.Accordion("Retrieved chunks (last turn)", open=False):
                     retrieved_chunks = gr.Markdown("No turns yet.")
 
@@ -284,6 +312,12 @@ def build_app() -> gr.Blocks:
             inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter],
             outputs=[chatbot, history_state, retrieved_chunks],
         )
+
+        def _clear_history():
+            _save_history([])
+            return [], []
+
+        clear_history.click(fn=_clear_history, inputs=[], outputs=[chatbot, history_state])
 
     return demo
 
