@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 
 import gradio as gr
@@ -75,6 +76,10 @@ def _doc_list_markdown() -> str:
     return "\n".join(lines)
 
 
+_MAX_FILES = 20
+_MAX_FILE_SIZE_MB = 50
+
+
 def _doc_choices() -> list[str]:
     return list(chat_service.rag_service.list_documents().keys())
 
@@ -89,8 +94,24 @@ def _index_documents(
         msg = "Please upload one or more `.txt`, `.md`, `.pdf` or `.docx` files first."
         return msg, _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
 
-    logger.info("_index_documents: %d file(s) received, rebuild=%s", len(files), rebuild_index)
+    # --- pre-validation ---
+    if len(files) > _MAX_FILES:
+        msg = f"❌ Too many files: {len(files)} uploaded, maximum is {_MAX_FILES}."
+        return msg, _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
+
     paths = [f if isinstance(f, str) else f.name for f in files]
+    size_errors: list[str] = []
+    for path in paths:
+        size_mb = os.path.getsize(path) / (1024 * 1024)
+        if size_mb > _MAX_FILE_SIZE_MB:
+            size_errors.append(
+                f"`{os.path.basename(path)}` ({size_mb:.1f} MB) exceeds the {_MAX_FILE_SIZE_MB} MB limit."
+            )
+    if size_errors:
+        msg = "❌ File size limit exceeded:\n\n" + "\n".join(f"- {e}" for e in size_errors)
+        return msg, _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
+
+    logger.info("_index_documents: %d file(s) received, rebuild=%s", len(files), rebuild_index)
     logger.debug("File paths: %s", paths)
 
     with_handles = [open(p, "rb") for p in paths]
@@ -113,6 +134,8 @@ def _index_documents(
         "✅ Indexing complete. "
         f"Docs indexed: {summary.docs_indexed}. Chunks indexed: {summary.chunks_indexed}."
     )
+    if summary.warnings:
+        msg += "\n\n⚠️ Warnings:\n" + "\n".join(f"- {w}" for w in summary.warnings)
     return msg, _doc_list_markdown(), gr.Dropdown(choices=_doc_choices())
 
 

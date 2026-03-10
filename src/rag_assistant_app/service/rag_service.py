@@ -17,10 +17,14 @@ from rag_assistant_app.retrieval.retriever import Retriever
 from rag_assistant_app.store.vector_store import ChunkRecord, LocalVectorStore, RetrievedChunk
 
 
+_MIN_TEXT_CHARS = 20  # documents with less extractable text are skipped
+
+
 @dataclass(slots=True)
 class IndexSummary:
     docs_indexed: int
     chunks_indexed: int
+    warnings: list[str]
 
 
 class RagService:
@@ -42,8 +46,15 @@ class RagService:
             self.vector_store.clear()
 
         documents = load_documents(files)
+        warnings: list[str] = []
         chunk_records: list[ChunkRecord] = []
+        docs_indexed = 0
         for doc in documents:
+            if len(doc.text.strip()) < _MIN_TEXT_CHARS:
+                msg = f"'{doc.filename}' produced no extractable text and was skipped."
+                logger.warning("index_documents: %s", msg)
+                warnings.append(msg)
+                continue
             chunks = chunk_text(
                 doc_id=doc.doc_id,
                 filename=doc.filename,
@@ -63,9 +74,10 @@ class RagService:
                         ),
                     )
                 )
+            docs_indexed += 1
         if chunk_records:
             self.vector_store.upsert_chunks(chunk_records)
-        summary = IndexSummary(docs_indexed=len(documents), chunks_indexed=len(chunk_records))
+        summary = IndexSummary(docs_indexed=docs_indexed, chunks_indexed=len(chunk_records), warnings=warnings)
         logger.info("index_documents: %s", summary)
         return summary
 
