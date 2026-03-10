@@ -11,6 +11,7 @@ import gradio as gr
 
 from rag_assistant_app.config import get_chat_history_path, get_config
 from rag_assistant_app.logging import configure_logging
+from rag_assistant_app.prompts import SYSTEM_PROMPT
 
 # Configure logging before any service is instantiated so that startup
 # messages (e.g. embedding model load) are captured.
@@ -172,6 +173,7 @@ def _chat_turn(
     top_k: int,
     score_threshold: float,
     doc_filter: list[str] | None,
+    system_prompt: str,
 ):
     history = list(history or [])
     active_filter: set[str] | None = set(doc_filter) if doc_filter else None
@@ -195,6 +197,7 @@ def _chat_turn(
             top_k=top_k,
             score_threshold=score_threshold,
             doc_filter=active_filter,
+            system_prompt=system_prompt,
         ):
             history[-1]["content"] = result.answer + "▌"
             yield history, history, "Streaming…"
@@ -262,6 +265,15 @@ def build_app() -> gr.Blocks:
                 index_button = gr.Button("Index documents", variant="primary")
                 index_status = gr.Markdown()
 
+                with gr.Accordion("System prompt", open=False):
+                    system_prompt_box = gr.Textbox(
+                        label="System prompt",
+                        value=SYSTEM_PROMPT,
+                        lines=10,
+                        show_label=False,
+                    )
+                    reset_prompt = gr.Button("Reset to default", scale=0)
+
                 gr.Markdown("## Indexed Documents")
                 doc_list = gr.Markdown(value=_doc_list_markdown)
                 with gr.Row():
@@ -327,12 +339,12 @@ def build_app() -> gr.Blocks:
 
         send.click(
             fn=_chat_turn,
-            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter],
+            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter, system_prompt_box],
             outputs=[chatbot, history_state, retrieved_chunks],
         )
         user_input.submit(
             fn=_chat_turn,
-            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter],
+            inputs=[user_input, history_state, top_k, score_threshold, chat_doc_filter, system_prompt_box],
             outputs=[chatbot, history_state, retrieved_chunks],
         )
 
@@ -341,6 +353,8 @@ def build_app() -> gr.Blocks:
             return [], []
 
         clear_history.click(fn=_clear_history, inputs=[], outputs=[chatbot, history_state])
+
+        reset_prompt.click(fn=lambda: SYSTEM_PROMPT, inputs=[], outputs=[system_prompt_box])
 
     return demo
 

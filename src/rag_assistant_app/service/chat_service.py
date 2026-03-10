@@ -49,8 +49,9 @@ class ChatService:
         question: str,
         context_block: str,
         conversation_history: list[tuple[str, str]],
+        system_prompt: str = SYSTEM_PROMPT,
     ) -> list[dict[str, str]]:
-        messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
         for user_msg, assistant_msg in conversation_history:
             messages.append({"role": "user", "content": user_msg})
             messages.append({"role": "assistant", "content": assistant_msg})
@@ -89,6 +90,7 @@ class ChatService:
         top_k: int,
         score_threshold: float,
         doc_filter: set[str] | None = None,
+        system_prompt: str = SYSTEM_PROMPT,
         temperature: float = 0.0,
         max_tokens: int = 600,
     ) -> ChatResult:
@@ -96,7 +98,7 @@ class ChatService:
         if should_abstain:
             return ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=chunks)
 
-        messages = self._build_messages(question, self._to_context_block(chunks), conversation_history)
+        messages = self._build_messages(question, self._to_context_block(chunks), conversation_history, system_prompt)
         logger.info("answer: sending %d message(s) to LLM (top_k=%d, threshold=%.4f)", len(messages), top_k, score_threshold)
         try:
             answer = self.llm_client.chat_completion(
@@ -119,6 +121,7 @@ class ChatService:
         top_k: int,
         score_threshold: float,
         doc_filter: set[str] | None = None,
+        system_prompt: str = SYSTEM_PROMPT,
         temperature: float = 0.0,
         max_tokens: int = 600,
     ) -> Iterator[ChatResult]:
@@ -128,7 +131,7 @@ class ChatService:
             yield ChatResult(answer=ABSTAIN_MESSAGE, retrieved_chunks=chunks)
             return
 
-        messages = self._build_messages(question, self._to_context_block(chunks), conversation_history)
+        messages = self._build_messages(question, self._to_context_block(chunks), conversation_history, system_prompt)
         logger.info("answer_stream: sending %d message(s) to LLM", len(messages))
 
         accumulated = ""
