@@ -21,6 +21,7 @@ class AppConfig:
     llm_timeout_seconds: float
     embedding_model: str
     vector_store_dir: Path
+    reranker_model: str  # empty string = disabled
 
 
 def get_config() -> AppConfig:
@@ -33,6 +34,7 @@ def get_config() -> AppConfig:
         llm_timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "300")),
         embedding_model=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
         vector_store_dir=Path(os.getenv("VECTOR_STORE_DIR", ".rag_store")),
+        reranker_model=os.getenv("RERANKER_MODEL", ""),
     )
 
 

@@ -12,6 +12,7 @@ from rag_assistant_app.embeddings.embedder import create_embedder
 from rag_assistant_app.ingestion.chunking import chunk_text
 from rag_assistant_app.ingestion.loaders import load_documents
 from rag_assistant_app.ingestion.metadata import build_chunk_metadata
+from rag_assistant_app.retrieval.reranker import RERANK_CANDIDATES_MULTIPLIER, create_reranker
 from rag_assistant_app.retrieval.retriever import Retriever
 from rag_assistant_app.store.vector_store import ChunkRecord, LocalVectorStore, RetrievedChunk
 
@@ -27,6 +28,7 @@ class RagService:
         embedder = create_embedder()
         self.vector_store = LocalVectorStore(embedder)
         self.retriever = Retriever(self.vector_store)
+        self.reranker = create_reranker()
 
     def index_documents(
         self,
@@ -68,11 +70,22 @@ class RagService:
         return summary
 
     def retrieve(self, query: str, top_k: int = 3) -> list[RetrievedChunk]:
-        results = self.retriever.retrieve(query, top_k)
-        logger.info(
-            "retrieve: query=%r → %d chunk(s) returned (top score=%.4f)",
-            query,
-            len(results),
-            results[0].score if results else float("nan"),
-        )
+        fetch_k = top_k * RERANK_CANDIDATES_MULTIPLIER if self.reranker else top_k
+        results = self.retriever.retrieve(query, fetch_k)
+
+        if self.reranker and results:
+            results = self.reranker.rerank(query, results, top_k)
+            logger.info(
+                "retrieve: reranked %d candidates → top-%d (top score=%.4f)",
+                fetch_k,
+                len(results),
+                results[0].score if results else float("nan"),
+            )
+        else:
+            logger.info(
+                "retrieve: query=%r → %d chunk(s) returned (top score=%.4f)",
+                query,
+                len(results),
+                results[0].score if results else float("nan"),
+            )
         return results

@@ -62,15 +62,20 @@ class ChatService:
     def _retrieve_and_check(
         self, question: str, top_k: int, score_threshold: float
     ) -> tuple[list[RetrievedChunk], bool]:
-        """Return (chunks, should_abstain)."""
+        """Return (chunks, should_abstain).
+
+        Uses max embedding score across all chunks for the threshold check so
+        that reranking (which reorders chunks) does not affect abstention logic.
+        """
         chunks = self.rag_service.retrieve(question, top_k=top_k)
         if not chunks:
             logger.info("answer: no chunks retrieved → abstaining")
             return [], True
-        if chunks[0].score < score_threshold:
+        best_score = max(c.score for c in chunks)
+        if best_score < score_threshold:
             logger.info(
                 "answer: best score %.4f < threshold %.4f → abstaining",
-                chunks[0].score,
+                best_score,
                 score_threshold,
             )
             return chunks, True
