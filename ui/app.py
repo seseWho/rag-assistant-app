@@ -76,9 +76,24 @@ def _index_documents(
     )
 
 
+def _history_to_pairs(history: list[dict]) -> list[tuple[str, str]]:
+    """Convert Gradio messages format to (user, assistant) tuple pairs for the service layer."""
+    pairs: list[tuple[str, str]] = []
+    pending_user: str | None = None
+    for msg in history:
+        role = msg.get("role")
+        content = msg.get("content", "")
+        if role == "user":
+            pending_user = content
+        elif role == "assistant" and pending_user is not None:
+            pairs.append((pending_user, content))
+            pending_user = None
+    return pairs
+
+
 def _chat_turn(
     message: str,
-    history: list[tuple[str, str]] | None,
+    history: list[dict] | None,
     top_k: int,
     score_threshold: float,
 ):
@@ -87,7 +102,7 @@ def _chat_turn(
     try:
         result = chat_service.answer(
             question=message,
-            conversation_history=history,
+            conversation_history=_history_to_pairs(history),
             top_k=top_k,
             score_threshold=score_threshold,
         )
@@ -97,10 +112,16 @@ def _chat_turn(
             "❌ An unexpected error occurred — check the console/logs for details.\n\n"
             "**Tip:** if you see a dimension mismatch error, enable 'Rebuild index' and re-index your documents."
         )
-        updated_history = history + [(message, error_msg)]
+        updated_history = history + [
+            {"role": "user", "content": message},
+            {"role": "assistant", "content": error_msg},
+        ]
         return updated_history, updated_history, "Error during retrieval."
 
-    updated_history = history + [(message, result.answer)]
+    updated_history = history + [
+        {"role": "user", "content": message},
+        {"role": "assistant", "content": result.answer},
+    ]
     return updated_history, updated_history, _format_retrieved_chunks(result.retrieved_chunks)
 
 

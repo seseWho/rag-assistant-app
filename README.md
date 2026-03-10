@@ -15,8 +15,8 @@ A local-first Gradio Retrieval-Augmented Generation (RAG) assistant.
 ## Requirements
 
 - Python 3.10+
-- [LM Studio](https://lmstudio.ai/) running locally with a model loaded
-- LM Studio local server enabled (OpenAI-compatible API)
+- [LM Studio](https://lmstudio.ai/) with `lms` CLI available
+- LM Studio local server enabled (OpenAI-compatible API, default port 1234)
 
 ## Installation
 
@@ -27,6 +27,36 @@ pip install --upgrade pip
 pip install -e .[dev]
 ```
 
+## LM Studio Setup
+
+### Download models
+
+```bash
+# Embedding model (~639 MB, optimized for retrieval)
+lms get jinaai/jina-embeddings-v5-text-small-retrieval-GGUF
+# select: Q8_0
+
+# Chat model (~9 GB, good balance of quality and VRAM usage)
+lms get bartowski/Qwen2.5-14B-Instruct-GGUF
+# select: Q4_K_M
+```
+
+### Load models and start the server
+
+```bash
+lms load jina-embeddings-v5-text-small-retrieval
+lms load qwen2.5-14b-instruct
+lms server start
+```
+
+Verify both models are running:
+
+```bash
+lms ps
+```
+
+> **Note:** The identifiers above (`jina-embeddings-v5-text-small-retrieval` and `qwen2.5-14b-instruct`) are what LM Studio assigns after loading. Use these in your `.env`.
+
 ## Configuration
 
 1. Copy environment template:
@@ -35,22 +65,17 @@ pip install -e .[dev]
 cp .env.example .env
 ```
 
-2. Set environment values in `.env`:
+1. Set environment values in `.env`:
 
 ```env
 LLM_BASE_URL=http://localhost:1234/v1
 LLM_API_KEY=lm-studio
-LLM_MODEL=<your-lm-studio-model-id>
+LLM_MODEL=qwen2.5-14b-instruct
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 VECTOR_STORE_DIR=.rag_store
 ```
 
-## Run LM Studio
-
-1. Open LM Studio.
-2. Download/load a chat-capable model.
-3. Start the local server (`Developer` tab).
-4. Confirm base URL and model id match your `.env` values.
+> `EMBEDDING_MODEL` is used by the local SentenceTransformers embedder (downloaded automatically from HuggingFace). It is independent from the LM Studio embedding model.
 
 ## Run the app
 

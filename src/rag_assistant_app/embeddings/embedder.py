@@ -1,4 +1,4 @@
-"""Embedding adapters with sentence-transformers preferred."""
+"""Embedding adapters: LM Studio API preferred, sentence-transformers fallback."""
 
 from __future__ import annotations
 
@@ -7,8 +7,6 @@ from dataclasses import dataclass
 from hashlib import sha1
 from math import sqrt
 from typing import Protocol
-
-from rag_assistant_app.config import get_embedding_model
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +38,40 @@ class HashingEmbedder:
         return self._embed(text)
 
 
+class LMStudioEmbedder:
+    """Embedder that calls LM Studio's OpenAI-compatible /v1/embeddings endpoint."""
+
+    def __init__(self, base_url: str, model: str, api_key: str = "lm-studio") -> None:
+        import requests
+
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._api_key = api_key
+        self._requests = requests
+
+    def _embed(self, texts: list[str]) -> list[list[float]]:
+        endpoint = f"{self._base_url}/embeddings"
+        headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
+        response = self._requests.post(
+            endpoint,
+            json={"model": self._model, "input": texts},
+            headers=headers,
+            timeout=60,
+        )
+        response.raise_for_status()
+        data = response.json()
+        vectors = [item["embedding"] for item in sorted(data["data"], key=lambda x: x["index"])]
+        return [_normalize(v) for v in vectors]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        logger.debug("LMStudioEmbedder: embedding %d documents", len(texts))
+        return self._embed(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        logger.debug("LMStudioEmbedder: embedding query")
+        return self._embed([text])[0]
+
+
 class SentenceTransformerEmbedder:
     """Adapter around sentence-transformers."""
 
@@ -59,16 +91,29 @@ class SentenceTransformerEmbedder:
         return vector.tolist()
 
 
+def _normalize(vector: list[float]) -> list[float]:
+    norm = sqrt(sum(v * v for v in vector)) or 1.0
+    return [v / norm for v in vector]
+
+
 def create_embedder() -> Embedder:
-    model_name = get_embedding_model()
+    from rag_assistant_app.config import get_config
+
+    config = get_config()
+
+    # Try LM Studio embedding API first
     try:
-        embedder = SentenceTransformerEmbedder(model_name)
-        logger.info("Using SentenceTransformerEmbedder (model=%s, dim=inferred)", model_name)
+        embedder = LMStudioEmbedder(config.llm_base_url, config.embedding_model, config.llm_api_key)
+        embedder.embed_query("ping")  # verify the model is reachable
+        logger.info("Using LMStudioEmbedder (model=%s)", config.embedding_model)
         return embedder
-    except Exception:
+    except Exception as exc:
         logger.warning(
-            "Failed to load SentenceTransformer model '%s'; falling back to HashingEmbedder.",
-            model_name,
-            exc_info=True,
+            "LM Studio embedding not available (model=%s, url=%s): %s. "
+            "Make sure the server is running (`lms server start`) and EMBEDDING_MODEL matches "
+            "the identifier shown by `lms ps`. Falling back to HashingEmbedder.",
+            config.embedding_model,
+            config.llm_base_url,
+            exc,
         )
         return HashingEmbedder()

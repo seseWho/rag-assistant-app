@@ -22,7 +22,7 @@ ruff format .
 mypy src
 ```
 
-**Runtime requirement:** LM Studio must be running locally with a loaded model and OpenAI-compatible server enabled (default: `http://localhost:1234/v1`). Copy `.env.example` to `.env` and set `LLM_MODEL` to your loaded model ID.
+**Runtime requirement:** LM Studio must be running locally with a loaded model and OpenAI-compatible server enabled (default: `http://localhost:1234/v1`). Copy `.env.example` to `.env` and set `LLM_MODEL` to your loaded model ID. If the model is slow, increase `LLM_TIMEOUT_SECONDS` (default: `300`).
 
 ## Architecture
 

@@ -27,7 +27,15 @@ class OpenAICompatClient:
     @classmethod
     def from_config(cls) -> OpenAICompatClient:
         config = get_config()
-        return cls(base_url=config.llm_base_url, api_key=config.llm_api_key, model=config.llm_model)
+        logger.info(
+            "OpenAICompatClient: model=%s, timeout=%.0fs", config.llm_model, config.llm_timeout_seconds
+        )
+        return cls(
+            base_url=config.llm_base_url,
+            api_key=config.llm_api_key,
+            model=config.llm_model,
+            timeout_seconds=config.llm_timeout_seconds,
+        )
 
     def chat_completion(
         self,
@@ -45,7 +53,7 @@ class OpenAICompatClient:
         }
         headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
-        logger.debug("POST %s  model=%s  messages=%d", endpoint, self.model, len(messages))
+        logger.debug("POST %s  model=%s  messages=%d  timeout=%.0fs", endpoint, self.model, len(messages), self.timeout_seconds)
         try:
             response = requests.post(
                 endpoint,
@@ -55,6 +63,13 @@ class OpenAICompatClient:
             )
             response.raise_for_status()
             data = response.json()
+        except requests.Timeout as exc:
+            logger.error("LLM request timed out after %.0fs", self.timeout_seconds, exc_info=True)
+            raise LlmServiceError(
+                f"The language model did not respond within {self.timeout_seconds:.0f}s. "
+                "The model may still be loading or is too slow for this hardware. "
+                "Increase LLM_TIMEOUT_SECONDS in your .env file."
+            ) from exc
         except requests.RequestException as exc:
             logger.error("LLM request failed: %s", exc, exc_info=True)
             raise LlmServiceError(
