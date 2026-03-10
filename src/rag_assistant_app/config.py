@@ -22,6 +22,7 @@ class AppConfig:
     embedding_model: str
     vector_store_dir: Path
     reranker_model: str  # empty string = disabled
+    vector_store_backend: str  # "chroma" or "local"
 
 
 def get_config() -> AppConfig:
@@ -35,6 +36,7 @@ def get_config() -> AppConfig:
         embedding_model=os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
         vector_store_dir=Path(os.getenv("VECTOR_STORE_DIR", ".rag_store")),
         reranker_model=os.getenv("RERANKER_MODEL", ""),
+        vector_store_backend=os.getenv("VECTOR_STORE_BACKEND", "chroma"),
     )
 
 

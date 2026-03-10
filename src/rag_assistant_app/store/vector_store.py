@@ -1,4 +1,4 @@
-"""Simple persistent local vector store."""
+"""Simple persistent local vector store and shared store types."""
 
 from __future__ import annotations
 
@@ -6,11 +6,23 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 from rag_assistant_app.config import get_vector_store_dir
 from rag_assistant_app.embeddings.embedder import Embedder
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class VectorStore(Protocol):
+    """Structural interface satisfied by all vector store implementations."""
+
+    def upsert_chunks(self, chunks: list[ChunkRecord]) -> None: ...
+    def list_documents(self) -> dict[str, int]: ...
+    def delete_document(self, doc_id: str) -> int: ...
+    def clear(self) -> None: ...
+    def query(self, text: str, top_k: int, doc_filter: set[str] | None = None) -> list[RetrievedChunk]: ...
 
 
 @dataclass(slots=True)

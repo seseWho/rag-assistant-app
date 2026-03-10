@@ -8,13 +8,14 @@ from typing import BinaryIO
 
 logger = logging.getLogger(__name__)
 
+from rag_assistant_app.config import get_config
 from rag_assistant_app.embeddings.embedder import create_embedder
 from rag_assistant_app.ingestion.chunking import chunk_text
 from rag_assistant_app.ingestion.loaders import load_documents
 from rag_assistant_app.ingestion.metadata import build_chunk_metadata
 from rag_assistant_app.retrieval.reranker import RERANK_CANDIDATES_MULTIPLIER, create_reranker
 from rag_assistant_app.retrieval.retriever import Retriever
-from rag_assistant_app.store.vector_store import ChunkRecord, LocalVectorStore, RetrievedChunk
+from rag_assistant_app.store.vector_store import ChunkRecord, RetrievedChunk, VectorStore
 
 
 _MIN_TEXT_CHARS = 20  # documents with less extractable text are skipped
@@ -27,10 +28,30 @@ class IndexSummary:
     warnings: list[str]
 
 
+def _create_vector_store(embedder) -> VectorStore:
+    backend = get_config().vector_store_backend
+    if backend == "local":
+        from rag_assistant_app.store.vector_store import LocalVectorStore
+        logger.info("Using LocalVectorStore backend (JSON file)")
+        return LocalVectorStore(embedder)
+    try:
+        from rag_assistant_app.store.chroma_store import ChromaVectorStore
+        logger.info("Using ChromaVectorStore backend")
+        return ChromaVectorStore(embedder)
+    except Exception as exc:
+        from rag_assistant_app.store.vector_store import LocalVectorStore
+        logger.warning(
+            "ChromaVectorStore unavailable (%s); falling back to LocalVectorStore. "
+            "Run `pip install --upgrade chromadb` to fix.",
+            exc,
+        )
+        return LocalVectorStore(embedder)
+
+
 class RagService:
     def __init__(self) -> None:
         embedder = create_embedder()
-        self.vector_store = LocalVectorStore(embedder)
+        self.vector_store = _create_vector_store(embedder)
         self.retriever = Retriever(self.vector_store)
         self.reranker = create_reranker()
 
